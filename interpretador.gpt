@@ -1,0 +1,80 @@
+function interpretarComGPT4(mensagem) {
+  try {
+    if (!mensagem) {
+      Logger.log('⚠️ Mensagem vazia para interpretação');
+      throw new Error('Mensagem vazia.');
+    }
+
+    Logger.log('🧠 Enviando mensagem para GPT-4: %s', mensagem);
+
+    const instrucoes = obterOrientacoesComportamento();
+    Logger.log('📋 Instruções carregadas com %s caracteres', instrucoes.length);
+
+    const response = UrlFetchApp.fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`
+      },
+      payload: JSON.stringify({
+        model: 'gpt-4',
+        messages: [
+          { role: 'system', content: instrucoes },
+          { role: 'user', content: mensagem }
+        ],
+        temperature: 0.2
+      }),
+      muteHttpExceptions: true
+    });
+
+    const responseCode = response.getResponseCode();
+    const responseText = response.getContentText();
+
+    Logger.log('🔁 Código de resposta da API: %s', responseCode);
+
+    if (responseCode !== 200) {
+      Logger.log('❌ Erro na resposta da OpenAI: %s', responseText);
+      throw new Error(`Erro da OpenAI: ${responseCode}`);
+    }
+
+    const data = JSON.parse(responseText);
+
+    if (!data.choices || !data.choices.length) {
+      throw new Error('Resposta inválida da OpenAI: sem opções');
+    }
+
+    const content = data.choices[0].message.content.trim();
+    Logger.log('📥 Resposta bruta do GPT: %s', content);
+
+    try {
+      const resultado = JSON.parse(content);
+      if (!resultado.acao) {
+        throw new Error('Campo "acao" ausente no JSON');
+      }
+      return resultado;
+    } catch (e) {
+      Logger.log('⚠️ Falha ao analisar resposta como JSON estruturado: %s', e);
+      return {
+        acao: 'texto_livre',
+        dados: {
+          texto: content
+        }
+      };
+    }
+
+  } catch (e) {
+    Logger.log('❌ Erro ao interpretar com GPT-4: %s', e);
+    Logger.log('❌ Stack trace: %s', e.stack);
+    throw new Error(`Erro ao interpretar com GPT-4: ${e.message}`);
+  }
+}
+
+function obterOrientacoesComportamento() {
+  try {
+    const doc = DocumentApp.openById(INSTRUCOES_DOC_ID);
+    return doc.getBody().getText();
+  } catch (e) {
+    Logger.log('❌ Erro ao carregar instruções do documento: %s', e);
+    throw new Error('Erro ao carregar o conteúdo do Google Docs.');
+  }
+}
