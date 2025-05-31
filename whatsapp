@@ -1,0 +1,399 @@
+// =================================================================
+// Funções de WhatsApp para o assistente A.L.F.R.E.D.
+// =================================================================
+
+// =================================================================
+// Função para registrar logs de mensagens
+// =================================================================
+function registrarLogMensagem(tipo, numero, mensagem, sucesso = true) {
+  try {
+    const planilha = SpreadsheetApp.openById(PLANILHA_ID);
+    const abaLogs = planilha.getSheetByName('Logs de Mensagens') || planilha.insertSheet('Logs de Mensagens');
+    
+    // Se a aba for nova, adicionar cabeçalhos
+    if (abaLogs.getLastRow() === 0) {
+      abaLogs.appendRow(['Data/Hora', 'Número', 'Tipo', 'Mensagem', 'Status']);
+      abaLogs.getRange(1, 1, 1, 5).setFontWeight('bold');
+    }
+    
+    // Registrar a mensagem
+    const agora = new Date();
+    const status = sucesso ? 'Sucesso' : 'Falha';
+    abaLogs.appendRow([agora, numero, tipo, mensagem, status]);
+    
+    Logger.log('✅ Log de mensagem registrado: %s, %s, %s', tipo, numero, status);
+    return true;
+  } catch (e) {
+    Logger.log('❌ Erro ao registrar log de mensagem: %s', e);
+    Logger.log('❌ Stack trace: %s', e.stack);
+    return false;
+  }
+}
+
+// =================================================================
+// Função para personalizar a resposta com emojis e dicas contextuais
+// =================================================================
+function personalizarResposta(interpret) {
+  let msg = interpret.mensagem || "";
+  const dados = interpret.dados || {};
+  const valor = dados.valor ? parseFloat(dados.valor) : 0;
+  const descricao = (dados.descricao || "").toLowerCase();
+  
+  // Obter hora atual para personalização por período do dia
+  const agora = new Date();
+  const hora = agora.getHours();
+  let saudacao = "";
+  
+  // Definir saudação baseada no período do dia
+  if (hora >= 5 && hora < 12) {
+    saudacao = "☀️ ";  // Manhã
+  } else if (hora >= 12 && hora < 18) {
+    saudacao = "🌤️ ";  // Tarde
+  } else if (hora >= 18 && hora < 23) {
+    saudacao = "🌙 ";  // Noite
+  } else {
+    saudacao = "🌠 ";  // Madrugada
+  }
+  
+  // Lista expandida de emojis para categorias
+  const emojisPorCategoria = {
+    "transporte": "🚗🛣️",
+    "alimentação": "🍽️🥗",
+    "saúde": "🏥❤️",
+    "entretenimento": "🎬🎭",
+    "investimento": "📈💎",
+    "freelancer": "💼🚀",
+    "educação": "📚🧠",
+    "moradia": "🏠🔑",
+    "vestuário": "👔👟",
+    "viagem": "✈️🌴",
+    "tecnologia": "💻📱",
+    "presente": "🎁🎊",
+    "default": "💰✨"
+  };
+
+  // Ações específicas com personalização aprimorada
+  if (interpret.acao === "registrar_receita") {
+    // Emojis para receitas
+    let emojisReceita = "✨💰";
+    
+    // Personalização por palavras-chave na descrição
+    if (descricao.includes("salário")) {
+      emojisReceita = "💼💸";
+      msg = `${saudacao}${emojisReceita} Salário registrado! Seu esforço recompensado.`;
+    } else if (descricao.includes("freelance") || descricao.includes("extra")) {
+      emojisReceita = "🚀💪";
+      msg = `${saudacao}${emojisReceita} Receita extra registrada! Seu esforço adicional valeu a pena!`;
+    } else if (descricao.includes("investimento") || descricao.includes("rendimento")) {
+      emojisReceita = "📈💎";
+      msg = `${saudacao}${emojisReceita} Rendimento registrado! Seu dinheiro trabalhando para você.`;
+    } else {
+      // Personalização por valor
+      if (valor > 1000) {
+        msg = `${saudacao}${emojisReceita} Receita significativa registrada! Excelente conquista!`;
+      } else {
+        msg = `${saudacao}${emojisReceita} Receita registrada! Cada entrada positiva conta.`;
+      }
+    }
+  } 
+  else if (interpret.acao === "registrar_despesa") {
+    // Obter categoria e emojis correspondentes
+    const categoria = (dados.categoria || "").toLowerCase();
+    const emojis = emojisPorCategoria[categoria] || emojisPorCategoria["default"];
+    
+    // Mensagem base com emojis da categoria
+    msg = `${saudacao}${emojis} Despesa registrada!`;
+    
+    // Adicionar comentário baseado no valor
+    if (valor > 500) {
+      msg += " Lembre-se de revisar gastos maiores regularmente.";
+    }
+    
+    // Personalização por categoria específica
+    if (categoria === "alimentação") {
+      msg = `${saudacao}${emojis} Despesa alimentar registrada! Nutrição é investimento.`;
+    } else if (categoria === "transporte") {
+      msg = `${saudacao}${emojis} Despesa de transporte registrada! Mobilidade garantida.`;
+    } else if (categoria === "saúde") {
+      msg = `${saudacao}${emojis} Despesa de saúde registrada! Cuidar-se é prioridade.`;
+    } else if (categoria === "educação") {
+      msg = `${saudacao}${emojis} Investimento em educação registrado! Conhecimento é poder.`;
+    }
+    
+    // Personalização por palavras-chave na descrição
+    if (descricao.includes("freelancer") || descricao.includes("trabalho")) {
+      msg += " Investir no trabalho sempre traz retorno!";
+    }
+  } 
+  else if (interpret.acao === "consultar_saldo") {
+    msg = `${saudacao}📊💰 Saldo atual: R$ ${valor}! Controle financeiro é liberdade.`;
+    
+    // Personalização por valor do saldo
+    if (valor < 0) {
+      msg = `${saudacao}⚠️📊 Atenção! Saldo negativo: R$ ${valor}. Vamos reverter isso!`;
+    } else if (valor < 100) {
+      msg = `${saudacao}📊⚠️ Saldo atual: R$ ${valor}. Atenção aos próximos gastos!`;
+    } else if (valor > 1000) {
+      msg = `${saudacao}📊🎯 Saldo saudável: R$ ${valor}! Excelente gestão financeira!`;
+    }
+  } 
+  else if (interpret.acao === "adicionar_compromisso") {
+    msg = `${saudacao}📅✅ Compromisso agendado! Organização é produtividade.`;
+    
+    // Personalização por tipo de compromisso
+    if (descricao.includes("reunião") || descricao.includes("trabalho")) {
+      msg = `${saudacao}💼📅 Compromisso profissional agendado! Preparação é sucesso.`;
+    } else if (descricao.includes("médico") || descricao.includes("saúde")) {
+      msg = `${saudacao}❤️🏥 Consulta agendada! Saúde em primeiro lugar.`;
+    } else if (descricao.includes("pagamento") || descricao.includes("conta")) {
+      msg = `${saudacao}💰📆 Pagamento agendado! Suas finanças organizadas.`;
+    }
+  }
+  
+  return msg;
+}
+
+// =================================================================
+// Atualização da função processarMensagem para usar a resposta personalizada
+// =================================================================
+function processarMensagem(numero, mensagem) {
+  try {
+    Logger.log('🔄 Iniciando processamento para número: %s', numero);
+  
+    let interpret;
+    try {
+      interpret = interpretarComGPT4(mensagem);
+      Logger.log('📤 Ação identificada: %s, dados: %s', interpret.acao, JSON.stringify(interpret.dados));
+    } catch (e) {
+      Logger.log('❌ Erro ao interpretar mensagem: %s', e);
+      enviarMensagemWhatsApp(numero, `❌ Erro de interpretação: ${e.message}`);
+      return;
+    }
+  
+    Logger.log('🔀 Executando ação: %s', interpret.acao);
+  
+    // Gera a mensagem personalizada, enriquecida com emojis e dicas
+    const respostaPersonalizada = personalizarResposta(interpret);
+  
+    switch (interpret.acao) {
+      case 'registrar_despesa':
+        if (!interpret.dados.valor) {
+          Logger.log('⚠️ Valor ausente para despesa');
+          enviarMensagemWhatsApp(numero, '⚠️ Para registrar a despesa, informe um valor válido.');
+        } else {
+          Logger.log('💾 Registrando despesa: %s', JSON.stringify(interpret.dados));
+          try {
+            registrarDespesa(interpret.dados);
+            Logger.log('✅ Despesa registrada com sucesso');
+            enviarMensagemWhatsApp(numero, respostaPersonalizada);
+          } catch (e) {
+            Logger.log('❌ Erro ao registrar despesa: %s', e);
+            enviarMensagemWhatsApp(numero, `❌ Erro ao registrar despesa: ${e.message}`);
+          }
+        }
+        break;
+  
+      case 'registrar_receita':
+        if (!interpret.dados.valor) {
+          Logger.log('⚠️ Valor ausente para receita');
+          enviarMensagemWhatsApp(numero, '⚠️ Para registrar a receita, informe um valor válido.');
+        } else {
+          Logger.log('💾 Registrando receita: %s', JSON.stringify(interpret.dados));
+          try {
+            registrarReceita(interpret.dados);
+            Logger.log('✅ Receita registrada com sucesso');
+            enviarMensagemWhatsApp(numero, respostaPersonalizada);
+          } catch (e) {
+            Logger.log('❌ Erro ao registrar receita: %s', e);
+            enviarMensagemWhatsApp(numero, `❌ Erro ao registrar receita: ${e.message}`);
+          }
+        }
+        break;
+  
+      case 'consultar_saldo':
+        Logger.log('💰 Consultando saldo...');
+        try {
+          const saldo = consultarSaldo();
+          Logger.log('📊 Saldo consultado: R$ %s', saldo);
+          // Atualizar o interpret com o valor do saldo para personalização
+          interpret.dados = interpret.dados || {};
+          interpret.dados.valor = saldo;
+          const respostaComSaldo = personalizarResposta(interpret);
+          enviarMensagemWhatsApp(numero, respostaComSaldo);
+        } catch (e) {
+          Logger.log('❌ Erro ao consultar saldo: %s', e);
+          enviarMensagemWhatsApp(numero, `❌ Erro ao consultar saldo: ${e.message}`);
+        }
+        break;
+  
+      case 'adicionar_compromisso':
+        if (!interpret.dados.data || !interpret.dados.hora) {
+          Logger.log('⚠️ Data/hora ausentes para compromisso');
+          enviarMensagemWhatsApp(numero, '⚠️ Informe a data e a hora para agendar o compromisso.');
+        } else {
+          Logger.log('📅 Adicionando compromisso: %s', JSON.stringify(interpret.dados));
+          try {
+            adicionarCompromisso(interpret.dados);
+            Logger.log('✅ Compromisso registrado na planilha');
+            try {
+              adicionarEventoCalendario(interpret.dados);
+              Logger.log('✅ Compromisso registrado no Google Calendar');
+              enviarMensagemWhatsApp(numero, respostaPersonalizada);
+            } catch (calendarError) {
+              Logger.log('⚠️ Erro ao adicionar no Google Calendar: %s', calendarError);
+              enviarMensagemWhatsApp(numero, respostaPersonalizada + ' (Falha ao sincronizar com o Calendar)');
+            }
+          } catch (e) {
+            Logger.log('❌ Erro ao registrar compromisso: %s', e);
+            enviarMensagemWhatsApp(numero, `❌ Erro ao registrar compromisso: ${e.message}`);
+          }
+        }
+        break;
+  
+      default:
+        Logger.log('🤔 Comando não reconhecido. Texto livre retornado: %s', respostaPersonalizada);
+        enviarMensagemWhatsApp(numero, respostaPersonalizada || '🤖 Desculpe, não entendi. Tente reformular sua mensagem.');
+    }
+  
+  } catch (e) {
+    Logger.log('❌ Erro geral no processamento: %s', e);
+    Logger.log('📛 Stack trace:\n%s', e.stack);
+    try {
+      enviarMensagemWhatsApp(numero, `❌ Erro no processamento da mensagem: ${e.message}`);
+    } catch (sendError) {
+      Logger.log('❌ Falha ao enviar mensagem de erro: %s', sendError);
+    }
+  }
+}
+
+// =================================================================
+// Teste de comunicação Twilio
+// =================================================================
+function simularRecebimentoMensagem(numero, mensagem) {
+  try {
+    Logger.log('🔄 Simulando recebimento de mensagem');
+    Logger.log('📱 Número: %s', numero);
+    Logger.log('💬 Mensagem: %s', mensagem);
+    
+    // Formata o número para o formato esperado pelo webhook
+    const numeroFormatado = numero.startsWith('+') ? numero : `+${numero}`;
+    const fromFull = `whatsapp:${numeroFormatado}`;
+    
+    // Simula o objeto de parâmetros do webhook
+    const e = {
+      parameter: {
+        From: fromFull,
+        Body: mensagem
+      }
+    };
+    
+    // Chama a função doPost como se fosse um webhook real
+    Logger.log('📤 Chamando doPost com parâmetros simulados');
+    const response = doPost(e);
+    
+    Logger.log('✅ Simulação concluída');
+    return { success: true, response };
+  } catch (e) {
+    Logger.log('❌ Erro na simulação de recebimento de mensagem: %s', e);
+    Logger.log('❌ Stack trace: %s', e.stack);
+    return { success: false, error: e.toString() };
+  }
+}
+
+// =================================================================
+// Função para testar a personalização de respostas
+// =================================================================
+function testarPersonalizacaoRespostas() {
+  try {
+    Logger.log('🔄 Iniciando teste de personalização de respostas');
+    
+    // Testar diferentes tipos de ações
+    const testes = [
+      {
+        nome: "Despesa simples",
+        interpret: {
+          acao: "registrar_despesa",
+          dados: {
+            valor: 50,
+            categoria: "alimentação",
+            descricao: "Almoço"
+          },
+          mensagem: "Despesa registrada com sucesso"
+        }
+      },
+      {
+        nome: "Despesa grande",
+        interpret: {
+          acao: "registrar_despesa",
+          dados: {
+            valor: 800,
+            categoria: "tecnologia",
+            descricao: "Novo celular"
+          },
+          mensagem: "Despesa registrada com sucesso"
+        }
+      },
+      {
+        nome: "Receita salário",
+        interpret: {
+          acao: "registrar_receita",
+          dados: {
+            valor: 3000,
+            categoria: "salário",
+            descricao: "Salário mensal"
+          },
+          mensagem: "Receita registrada com sucesso"
+        }
+      },
+      {
+        nome: "Consulta saldo",
+        interpret: {
+          acao: "consultar_saldo",
+          dados: {
+            valor: 1500
+          },
+          mensagem: "Seu saldo atual é de R$ 1500"
+        }
+      },
+      {
+        nome: "Compromisso médico",
+        interpret: {
+          acao: "adicionar_compromisso",
+          dados: {
+            data: "10/06/2023",
+            hora: "14:30",
+            descricao: "Consulta médica"
+          },
+          mensagem: "Compromisso agendado com sucesso"
+        }
+      }
+    ];
+    
+    // Executar os testes
+    const resultados = [];
+    for (const teste of testes) {
+      Logger.log('🧪 Testando personalização: %s', teste.nome);
+      const resposta = personalizarResposta(teste.interpret);
+      Logger.log('📝 Resposta original: %s', teste.interpret.mensagem);
+      Logger.log('📝 Resposta personalizada: %s', resposta);
+      resultados.push({
+        teste: teste.nome,
+        original: teste.interpret.mensagem,
+        personalizada: resposta,
+        sucesso: resposta !== teste.interpret.mensagem
+      });
+    }
+    
+    // Exibir resultados
+    Logger.log('📊 Resultados dos testes de personalização:');
+    for (const resultado of resultados) {
+      Logger.log('- %s: %s', resultado.teste, resultado.sucesso ? 'Sucesso ✅' : 'Falha ❌');
+    }
+    
+    return resultados;
+  } catch (e) {
+    Logger.log('❌ Erro no teste de personalização: %s', e);
+    Logger.log('❌ Stack trace: %s', e.stack);
+    return { success: false, error: e.toString() };
+  }
+}
